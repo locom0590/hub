@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Zen Bahçe — Klinik Rehabilitasyon</title>
+<style>
+  :root{
+    --sand:#E9E1D3; --ink:#5A5346; --ink-soft:#7a7060;
+    --sage:#93A582; --stone:#8C9097; --petal:#D6AAB4;
+    --card:rgba(255,253,248,.82); --line:rgba(90,83,70,.22);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;background:var(--sand);color:var(--ink);
+    font-family:-apple-system,"Segoe UI",Roboto,sans-serif;touch-action:none;
+    user-select:none;-webkit-user-select:none}
+  canvas{position:fixed;inset:0;display:block}
+  .serif{font-family:Georgia,'Times New Roman',serif}
+
+  .ui{position:fixed;z-index:10}
+
+  /* üst bar */
+  #topbar{top:0;left:0;right:0;height:54px;display:flex;align-items:center;
+    justify-content:space-between;padding:0 16px;pointer-events:none}
+  #back{pointer-events:auto;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);
+    background:var(--card);color:var(--ink);font-size:20px;cursor:pointer;display:none;
+    align-items:center;justify-content:center;backdrop-filter:blur(6px)}
+  #title{font-size:15px;letter-spacing:.32em;opacity:.5;text-align:center;flex:1}
+  #toolset{pointer-events:auto;display:flex;gap:8px}
+  .icon-btn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);
+    background:var(--card);color:var(--ink);font-size:15px;cursor:pointer;display:flex;
+    align-items:center;justify-content:center;opacity:.85;backdrop-filter:blur(6px);transition:opacity .3s}
+  .icon-btn.on{opacity:1;box-shadow:0 2px 8px rgba(90,83,70,.1)}
+
+  /* metrik paneli */
+  #metrics{top:60px;right:14px;background:var(--card);backdrop-filter:blur(10px);
+    border-radius:16px;padding:16px 18px;min-width:210px;box-shadow:0 6px 22px rgba(90,83,70,.1);
+    display:none;letter-spacing:.02em}
+  #metrics.show{display:block}
+  #metrics h4{font-weight:500;font-size:10.5px;opacity:.5;letter-spacing:.14em;margin-bottom:10px}
+  #metrics .row{display:flex;justify-content:space-between;gap:16px;font-size:12.5px;margin-bottom:3px}
+  #metrics .val{font-variant-numeric:tabular-nums;color:#3f3a30;font-weight:600}
+  #metrics .bar{height:3px;background:rgba(90,83,70,.12);border-radius:2px;margin:0 0 9px}
+  #metrics .bar i{display:block;height:100%;border-radius:2px;background:var(--sage);width:0%;transition:width .5s ease}
+  #scaleTag{margin-top:6px;padding-top:10px;border-top:1px solid var(--line);font-size:11.5px;line-height:1.6}
+  #scaleTag b{color:#3f3a30;font-weight:600}
+  #scaleTag .muted{opacity:.55;font-size:10px;display:block;margin-top:4px;font-style:italic}
+
+  /* ayarlar */
+  #settings{top:60px;right:14px;background:var(--card);backdrop-filter:blur(10px);
+    border-radius:16px;padding:16px 18px;display:none;box-shadow:0 6px 22px rgba(90,83,70,.1);width:210px}
+  #settings.show{display:block}
+  #settings label{display:block;font-size:11.5px;opacity:.7;letter-spacing:.05em;margin:10px 0 4px}
+  #settings label:first-child{margin-top:0}
+  #settings input[type=range]{width:100%;accent-color:var(--sage)}
+  #settings .v{float:right;font-weight:600;color:#3f3a30}
+
+  /* alt ipucu */
+  #hint{bottom:26px;left:0;right:0;text-align:center;font-size:14px;color:var(--ink-soft);
+    font-style:italic;pointer-events:none;transition:opacity 1s;padding:0 30px}
+  #hint.hide{opacity:0}
+
+  /* kamera izin katmanı */
+  #camGate{inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(233,225,211,.94);backdrop-filter:blur(4px);z-index:20;flex-direction:column;
+    text-align:center;padding:40px}
+  #camGate.show{display:flex}
+  #camGate h3{font-size:20px;font-weight:400;margin-bottom:12px;letter-spacing:.05em}
+  #camGate p{font-size:14px;line-height:1.7;opacity:.7;max-width:340px;margin-bottom:24px}
+  #camGate button{padding:12px 30px;border-radius:26px;border:1px solid var(--line);
+    background:var(--card);color:var(--ink);font-size:15px;cursor:pointer;letter-spacing:.04em}
+  #camStatus{margin-top:16px;font-size:12px;opacity:.6;min-height:18px}
+  /* kamera önizlemesi gizli tutulur (yüz felci hastası kendi görüntüsünü görmesin) */
+  #camVideo{position:fixed;width:2px;height:2px;opacity:0;pointer-events:none;top:-10px;left:-10px}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div class="ui" id="topbar">
+  <button id="back" title="Bahçeye dön">‹</button>
+  <div id="title" class="serif">ZEN BAHÇE</div>
+  <div id="toolset">
+    <button class="icon-btn on" id="btnSound" title="Ses">♪</button>
+    <button class="icon-btn" id="btnMetrics" title="Ölçümler">◔</button>
+    <button class="icon-btn" id="btnSettings" title="Ayarlar">≡</button>
+  </div>
+</div>
+
+<div class="ui" id="metrics">
+  <h4 id="mHead">SEANS ÖLÇÜMLERİ</h4>
+  <div class="row"><span id="l1">Amplitüd</span><span class="val" id="m1">–</span></div>
+  <div class="bar"><i id="b1"></i></div>
+  <div class="row"><span id="l2">Düzgünlük</span><span class="val" id="m2">–</span></div>
+  <div class="bar"><i id="b2"></i></div>
+  <div class="row"><span id="l3">Ritim</span><span class="val" id="m3">–</span></div>
+  <div class="bar"><i id="b3"></i></div>
+  <div class="row"><span>Tekrar</span><span class="val" id="m4">0</span></div>
+  <div id="scaleTag"></div>
+</div>
+
+<div class="ui" id="settings">
+  <label>Zorluk <span class="v" id="vDiff">4</span></label>
+  <input type="range" id="sDiff" min="1" max="10" step="1" value="4">
+  <label>Tempo (vuruş/dk) <span class="v" id="vTempo">40</span></label>
+  <input type="range" id="sTempo" min="30" max="70" step="1" value="40">
+  <label>Filtre gücü <span class="v" id="vFilter">Orta</span></label>
+  <input type="range" id="sFilter" min="1" max="5" step="1" value="3">
+</div>
+
+<div id="hint" class="ui"></div>
+
+<div id="camGate" class="ui">
+  <h3 class="serif">Rüzgar</h3>
+  <p>Bu modül ön kameranı kullanır. Yüzün <b>ekranda gösterilmez</b> — yalnızca bahçe mimiklerine tepki verir. Görüntü cihazından dışarı çıkmaz.</p>
+  <button id="camStart">Kamerayı başlat</button>
+  <div id="camStatus"></div>
+</div>
+<video id="camVideo" playsinline muted autoplay></video>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script>
+'use strict';
+/* ============================================================
+   ZEN BAHÇE — klinik rehabilitasyon oyun iskeleti
+   Modüller:  hub | sand(Parkinson) | stone(hemipleji) | wind(yüz felci)
+   ============================================================ */
+var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+var W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,2);
+
+/* kalıcı zemin katmanı (kum izleri / filizler burada birikir) */
+var layer=document.createElement('canvas'),lc=layer.getContext('2d');
+
+function paintBase(){
+  lc.save();lc.setTransform(1,0,0,1,0,0);
+  lc.fillStyle='#E9E1D3';lc.fillRect(0,0,layer.width,layer.height);
+  for(var i=0;i<layer.width*layer.height/2600;i++){
+    lc.fillStyle=Math.random()>.5?'rgba(180,165,140,.10)':'rgba(255,255,255,.10)';
+    lc.fillRect(Math.random()*layer.width,Math.random()*layer.height,1.5,1.5);
+  }
+  lc.restore();
+}
+function resize(){
+  W=window.innerWidth;H=window.innerHeight;
+  cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+  layer.width=W*DPR;layer.height=H*DPR;lc.setTransform(DPR,0,0,DPR,0,0);
+  paintBase();layoutStones();layoutHub();
+}
+
+/* ---------------- global durum ---------------- */
+var screen='hub';               // hub|sand|stone|wind
+var soundOn=true, audio=null, nextBeat=0;
+var difficulty=4, beatMs=1500, filterStrength=3;
+var growth=0;                   // ortak bahçe ilerlemesi 0..1 (tüm modüllerden beslenir)
+
+/* seans metrikleri (modül değişince sıfırlanır) */
+var M={amp:0,smooth:0,rhythm:0,reps:0};
+
+/* ---------------- ses ---------------- */
+function ensureAudio(){if(!audio){try{audio=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}}}
+function chime(f,v,d){
+  if(!audio||!soundOn)return;
+  var o=audio.createOscillator(),g=audio.createGain();
+  o.type='sine';o.frequency.value=f;
+  g.gain.setValueAtTime(0,audio.currentTime);
+  g.gain.linearRampToValueAtTime(v,audio.currentTime+.02);
+  g.gain.exponentialRampToValueAtTime(.0001,audio.currentTime+d);
+  o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+d);
+}
+
+/* ---------------- girdi + akıcılık ölçümü (kum & taş ortak) ---------------- */
+var raw={x:0,y:0},sm={x:0,y:0},down=false,stroking=false;
+var velH=[],lastPt=null,lastT=0,bx0=0,bx1=0,by0=0,by1=0,revs=[],lastDir=null;
+function filterAlpha(){return [0,.30,.22,.16,.11,.07][filterStrength];} // güç arttıkça daha çok süzer
+function begin(x,y){raw.x=sm.x=x;raw.y=sm.y=y;lastPt={x:x,y:y};lastT=performance.now();
+  stroking=true;bx0=bx1=x;by0=by1=y;velH=[];lastDir=null;}
+function smoothStep(a){sm.x+=(raw.x-sm.x)*a;sm.y+=(raw.y-sm.y)*a;}
+function flow(){
+  var t=performance.now(),dt=Math.max(8,t-lastT);
+  var vx=(sm.x-lastPt.x)/dt,vy=(sm.y-lastPt.y)/dt,sp=Math.hypot(vx,vy);
+  if(sp>.02){
+    velH.push({vx:vx,vy:vy});if(velH.length>40)velH.shift();
+    var dir=Math.abs(vx)>Math.abs(vy)?(vx>0?1:-1):(vy>0?2:-2);
+    if(lastDir!==null&&dir!==lastDir&&sp>.08){revs.push(t);if(revs.length>12)revs.shift();}
+    lastDir=dir;
+  }
+  lastPt={x:sm.x,y:sm.y};lastT=t;
+  bx0=Math.min(bx0,sm.x);bx1=Math.max(bx1,sm.x);by0=Math.min(by0,sm.y);by1=Math.max(by1,sm.y);
+}
+function calcSmooth(){
+  if(velH.length<6)return M.smooth;
+  var s=0,n=0;
+  for(var i=1;i<velH.length;i++){
+    var a=velH[i-1],b=velH[i],ma=Math.hypot(a.vx,a.vy),mb=Math.hypot(b.vx,b.vy);
+    if(ma<.01||mb<.01)continue;
+    var dot=(a.vx*b.vx+a.vy*b.vy)/(ma*mb);
+    s+=Math.acos(Math.max(-1,Math.min(1,dot)));n++;
+  }
+  if(!n)return M.smooth;
+  return Math.max(0,Math.min(100,100-(s/n)*260));
+}
+function calcRhythm(){
+  if(revs.length<4)return M.rhythm;
+  var iv=[],i;for(i=1;i<revs.length;i++)iv.push(revs[i]-revs[i-1]);
+  var mean=iv.reduce(function(a,b){return a+b;})/iv.length;
+  var sd=Math.sqrt(iv.reduce(function(a,b){return a+(b-mean)*(b-mean);},0)/iv.length);
+  return Math.max(0,Math.min(100,100-(sd/mean)*130));
+}
+function feedGrowth(amt){growth=Math.min(1,growth+amt);}
+
+/* ============================================================
+   KUM MODÜLÜ (Parkinson) — geniş yaylar, ritmik ipucu, amplitüd
+   ============================================================ */
+function rake(from,to){
+  var dx=to.x-from.x,dy=to.y-from.y,len=Math.hypot(dx,dy);
+  if(len<1.2)return;
+  var nx=-dy/len,ny=dx/len,i,o;
+  for(i=0;i<5;i++){o=(i-2)*6.5;
+    lc.strokeStyle='rgba(150,133,105,.5)';lc.lineWidth=2.2;lc.lineCap='round';
+    lc.beginPath();lc.moveTo(from.x+nx*o,from.y+ny*o);lc.lineTo(to.x+nx*o,to.y+ny*o);lc.stroke();
+    lc.strokeStyle='rgba(255,250,238,.55)';lc.lineWidth=1;
+    lc.beginPath();lc.moveTo(from.x+nx*(o+1.6),from.y+ny*(o+1.6));lc.lineTo(to.x+nx*(o+1.6),to.y+ny*(o+1.6));lc.stroke();
+  }
+}
+var enso=0,pulse=0;
+function drawEnso(){
+  if(enso<=.01)return;
+  var r=Math.min(W,H)*.13,x=W/2,y=H*.24;
+  ctx.save();ctx.globalAlpha=.12+enso*.42;
+  ctx.strokeStyle='#6e6656';ctx.lineWidth=5;ctx.lineCap='round';
+  ctx.beginPath();ctx.arc(x,y,r,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.min(1,enso)*.94);ctx.stroke();
+  ctx.restore();
+}
+function drawBeat(){
+  ctx.save();ctx.globalAlpha=.25+pulse*.45;ctx.fillStyle='#93A582';
+  ctx.beginPath();ctx.arc(W/2,H*.24,4+pulse*7,0,Math.PI*2);ctx.fill();ctx.restore();
+  pulse*=.93;
+}
+function endSand(){
+  stroking=false;
+  var diag=Math.hypot(bx1-bx0,by1-by0),amp=Math.min(100,diag/Math.hypot(W,H)*160);
+  if(diag>36){
+    M.reps++;
+    M.amp=M.amp?M.amp*.6+amp*.4:amp;
+    var s=calcSmooth();M.smooth=M.smooth?M.smooth*.6+s*.4:s;
+    M.rhythm=calcRhythm();
+    enso=Math.min(1,enso+(amp/100)*(M.smooth/100)*.14);
+    feedGrowth((amp/100)*.02);
+    if(enso>=1)chime(792,.06,2.2);
+  }
+}
+
+/* ============================================================
+   TAŞ MODÜLÜ (hemipleji) — uzanma, sürükleme, filiz
+   ============================================================ */
+var stones=[],target=null,drag=null,dragStart=null,dragPath=0;
+function layoutStones(){
+  stones=[];var cx=W/2,y=H-70,i;
+  for(i=0;i<3;i++)stones.push({x:cx+(i-1)*74,y:y,r:24+i*3,hx:cx+(i-1)*74,hy:y,
+    hue:['#8C9097','#9A948A','#7F8892'][i]});
+  newTarget();
+}
+function newTarget(){
+  var d=difficulty/10,reach=H*.2+d*H*.5,cy=(H-90)-reach;
+  var cx=W/2+(Math.random()-.5)*W*.72*d+(Math.random()-.5)*40;
+  target={x:Math.max(60,Math.min(W-60,cx)),y:Math.max(80,Math.min(H*.72,cy)),r:52-d*26};
+}
+function drawStone(c,s){
+  c.save();c.translate(s.x,s.y);
+  c.fillStyle=s.hue;c.beginPath();c.ellipse(0,0,s.r,s.r*.78,0,0,Math.PI*2);c.fill();
+  c.fillStyle='rgba(255,255,255,.18)';c.beginPath();c.ellipse(-s.r*.25,-s.r*.28,s.r*.45,s.r*.3,-.4,0,Math.PI*2);c.fill();
+  c.restore();
+}
+function drawTarget(){
+  if(!target)return;var t=performance.now()/1000;
+  ctx.save();ctx.strokeStyle='rgba(90,83,70,.4)';ctx.setLineDash([6,8]);ctx.lineWidth=1.5;
+  ctx.globalAlpha=.55+.2*Math.sin(t*2);
+  ctx.beginPath();ctx.arc(target.x,target.y,target.r,0,Math.PI*2);ctx.stroke();
+  ctx.setLineDash([]);ctx.globalAlpha=.3;ctx.fillStyle='#5A5346';
+  ctx.beginPath();ctx.arc(target.x,target.y,3,0,Math.PI*2);ctx.fill();ctx.restore();
+}
+function sprout(x,y){
+  var n=3+Math.floor(Math.random()*3),i;
+  for(i=0;i<n;i++){var a=-Math.PI/2+(Math.random()-.5)*1.1,len=16+Math.random()*18;
+    lc.strokeStyle='rgba('+(125+Math.random()*30|0)+','+(150+Math.random()*25|0)+',110,.85)';
+    lc.lineWidth=1.8;lc.lineCap='round';
+    lc.beginPath();lc.moveTo(x,y);
+    lc.quadraticCurveTo(x+Math.cos(a)*len*.5+(Math.random()-.5)*8,y+Math.sin(a)*len*.6,x+Math.cos(a)*len,y+Math.sin(a)*len);
+    lc.stroke();
+  }
+  if(M.reps>0&&M.reps%5===0){
+    lc.fillStyle='rgba(214,170,180,.9)';
+    for(var p=0;p<5;p++){var b=p/5*Math.PI*2;lc.beginPath();lc.ellipse(x+Math.cos(b)*4.5,y-20+Math.sin(b)*4.5,3.4,3.4,0,0,Math.PI*2);lc.fill();}
+    lc.fillStyle='rgba(240,225,160,.95)';lc.beginPath();lc.arc(x,y-20,2.6,0,Math.PI*2);lc.fill();
+  }
+}
+function endStone(){
+  var st=drag;drag=null;
+  if(target&&Math.hypot(st.x-target.x,st.y-target.y)<target.r){
+    var straight=Math.hypot(target.x-dragStart.x,target.y-dragStart.y);
+    var eff=Math.min(100,straight/Math.max(1,dragPath)*100);
+    var reach=Math.min(100,straight/Math.hypot(W,H)*160);
+    M.reps++;
+    M.amp=M.amp?M.amp*.6+reach*.4:reach;
+    var s2=calcSmooth();M.smooth=M.smooth?M.smooth*.6+s2*.4:s2;
+    M.rhythm=M.rhythm?M.rhythm*.6+eff*.4:eff;
+    drawStone(lc,{x:target.x,y:target.y,r:st.r,hue:st.hue});
+    sprout(target.x,target.y-st.r*.5);
+    feedGrowth(.025);chime(660,.055,1.8);
+    st.x=st.hx;st.y=st.hy;newTarget();
+  } else {st.x=st.hx;st.y=st.hy;} /* ıskalarsa ceza yok, sessizce döner */
+}
+
+/* ============================================================
+   RÜZGAR MODÜLÜ (yüz felci) — MediaPipe FaceMesh
+   Simetrik & kontrollü mimiği ödüllendirir; zorlanmayı değil.
+   ============================================================ */
+var faceMesh=null,camera=null,camReady=false,camError='';
+var neutral=null,calibrating=false,calibFrames=[],calibStart=0;
+var faceMetric={sym:0,act:0,strain:0};       // simetri, aktivasyon, zorlanma
+var petals=[];                                 // uçuşan çiçek yaprakları
+var windX=0;                                   // rüzgar yönü/şiddeti (yumuşatılmış)
+var lastFaceT=0;
+
+/* landmark indeksleri */
+var L={mouthL:61,mouthR:291,lipTop:13,lipBot:14,browL:105,browR:334,
+       eyeLout:33,eyeRout:263,eyeLin:133,eyeRin:362,nose:1,chin:152,foreTop:10};
+
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+function faceScale(lm){return dist(lm[L.eyeLout],lm[L.eyeRout])||1;} /* göz arası ~ mesafe normalizasyonu */
+
+function captureNeutralFrame(lm){
+  var sc=faceScale(lm),c=lm[L.nose];
+  var f={};for(var k in L){var p=lm[L[k]];f[k]={x:(p.x-c.x)/sc,y:(p.y-c.y)/sc};}
+  return f;
+}
+function onFace(results){
+  lastFaceT=performance.now();
+  if(!results.multiFaceLandmarks||!results.multiFaceLandmarks.length){faceMetric.act*=.9;return;}
+  var lm=results.multiFaceLandmarks[0];
+  var f=captureNeutralFrame(lm);
+  if(calibrating){
+    calibFrames.push(f);
+    if(performance.now()-calibStart>1600){
+      neutral={};for(var k in L){var sx=0,sy=0;calibFrames.forEach(function(fr){sx+=fr[k].x;sy+=fr[k].y;});
+        neutral[k]={x:sx/calibFrames.length,y:sy/calibFrames.length};}
+      calibrating=false;setHint('Hazır — gülümse, kaş kaldır, dudak büz. Bahçe seninle nefes alsın.');
+      document.getElementById('camGate').classList.remove('show');
+    }
+    return;
+  }
+  if(!neutral)return;
+  /* nötre göre yer değişimleri */
+  function disp(k){return {x:f[k].x-neutral[k].x,y:f[k].y-neutral[k].y,m:Math.hypot(f[k].x-neutral[k].x,f[k].y-neutral[k].y)};}
+  var mL=disp('mouthL'),mR=disp('mouthR'),bL=disp('browL'),bR=disp('browR');
+  /* aktivasyon: ağız köşeleri + kaşların toplam hareketi */
+  var act=(mL.m+mR.m+bL.m+bR.m)/4;
+  var actPct=Math.min(100,act*420);
+  /* simetri: sol-sağ hareket büyüklüğü ne kadar eşit? */
+  function symPair(a,b){var s=a.m+b.m;return s<.004?1:1-Math.abs(a.m-b.m)/s;}
+  var sym=(symPair(mL,mR)*0.6+symPair(bL,bR)*0.4);
+  var symPct=Math.max(0,Math.min(100,sym*100));
+  /* zorlanma: yüksek aktivasyon + düşük simetri = sinkinezi riski */
+  var strain=actPct>45?(1-sym)*Math.min(1,(actPct-45)/55):0;
+  /* yumuşatma */
+  faceMetric.sym=faceMetric.sym*.8+symPct*.2;
+  faceMetric.act=faceMetric.act*.8+actPct*.2;
+  faceMetric.strain=faceMetric.strain*.85+strain*100*.15;
+  /* rüzgar: yatay ağız asimetrisi yönü verir; şiddet = kontrollü aktivasyon */
+  var quality=(faceMetric.sym/100)*(1-Math.min(1,faceMetric.strain/60)); // kontrollü&simetrik pay
+  var targetWind=(mR.x-mL.x)*300*quality;
+  windX+=(targetWind-windX)*.08;
+  /* ödül: yalnızca kontrollü, simetrik ve yeterli aktivasyonda çiçek açar */
+  if(faceMetric.act>32 && quality>0.6 && Math.random()<0.10){
+    spawnPetal();
+    M.amp=M.amp?M.amp*.7+faceMetric.act*.3:faceMetric.act; /* aktivasyon genliği */
+    M.smooth=faceMetric.sym;                               /* simetri */
+    M.rhythm=Math.max(0,100-faceMetric.strain);            /* kontrol (düşük zorlanma) */
+    if(M.reps===0||performance.now()-(onFace._lastRep||0)>700){M.reps++;onFace._lastRep=performance.now();feedGrowth(.012);}
+  }
+}
+function spawnPetal(){
+  petals.push({x:W*(.3+Math.random()*.4),y:H*.35+Math.random()*40,
+    vx:0,vy:-.2-Math.random()*.3,rot:Math.random()*6,a:1,size:6+Math.random()*5,
+    hue:Math.random()>.5?'#D6AAB4':'#E8C4B0'});
+  if(petals.length>60)petals.shift();
+}
+function updatePetals(){
+  for(var i=petals.length-1;i>=0;i--){var p=petals[i];
+    p.vx+=(windX*.02-p.vx)*.05;p.x+=p.vx+Math.sin((performance.now()/700)+p.rot)*.3;
+    p.y+=p.vy;p.vy*=.995;p.rot+=.01*p.vx;p.a-=.0025;
+    if(p.a<=0||p.y<-20||p.x<-20||p.x>W+20)petals.splice(i,1);
+  }
+}
+function drawWindScene(){
+  /* zemin + sakin ağaç dalı */
+  var groundY=H*.78;
+  ctx.save();
+  ctx.strokeStyle='rgba(110,102,86,.5)';ctx.lineWidth=6;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(W*.5,groundY);
+  ctx.quadraticCurveTo(W*.5+windX*.4,groundY-H*.18,W*.5+windX,groundY-H*.34);ctx.stroke();
+  /* birkaç ince dal */
+  var bx=W*.5+windX*.7,by=groundY-H*.3;
+  for(var d=-1;d<=1;d+=2){
+    ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(bx,by);
+    ctx.quadraticCurveTo(bx+d*W*.08+windX*.3,by-20,bx+d*W*.14+windX*.5,by-H*.04);ctx.stroke();
+  }
+  ctx.restore();
+  /* çiçek yaprakları */
+  for(var i=0;i<petals.length;i++){var p=petals[i];
+    ctx.save();ctx.globalAlpha=Math.max(0,p.a);ctx.translate(p.x,p.y);ctx.rotate(p.rot);
+    ctx.fillStyle=p.hue;ctx.beginPath();ctx.ellipse(0,0,p.size,p.size*.55,0,0,Math.PI*2);ctx.fill();ctx.restore();
+  }
+  /* zorlanma uyarısı: nazik kırmızımsı vinyet */
+  if(faceMetric.strain>40){
+    ctx.save();ctx.globalAlpha=Math.min(.25,(faceMetric.strain-40)/120);
+    var g=ctx.createRadialGradient(W/2,H/2,H*.3,W/2,H/2,H*.6);
+    g.addColorStop(0,'rgba(210,120,110,0)');g.addColorStop(1,'rgba(200,90,80,.5)');
+    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);ctx.restore();
+  }
+}
+function initFaceMesh(){
+  if(faceMesh)return true;
+  if(typeof FaceMesh==='undefined'){camError='Yüz kütüphanesi yüklenemedi (internet gerekli).';return false;}
+  faceMesh=new FaceMesh({locateFile:function(f){return 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/'+f;}});
+  faceMesh.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.5,minTrackingConfidence:.5});
+  faceMesh.onResults(onFace);
+  return true;
+}
+function startCamera(){
+  var st=document.getElementById('camStatus');
+  if(!initFaceMesh()){st.textContent=camError;return;}
+  st.textContent='Kamera başlatılıyor…';
+  var video=document.getElementById('camVideo');
+  try{
+    camera=new Camera(video,{onFrame:async function(){await faceMesh.send({image:video});},width:640,height:480});
+    camera.start().then(function(){
+      camReady=true;st.textContent='Kalibrasyon: 2 saniye nötr ifadeyle bekle…';
+      calibrating=true;calibFrames=[];calibStart=performance.now();neutral=null;
+    }).catch(function(e){st.textContent='Kamera açılamadı: '+(e.message||e);});
+  }catch(e){st.textContent='Kamera hatası: '+(e.message||e);}
+}
+
+/* ============================================================
+   BAHÇE HUB — üç modüle giriş + ortak ilerleme
+   ============================================================ */
+var hubNodes=[];
+function layoutHub(){
+  hubNodes=[
+    {id:'sand', x:W*0.28, y:H*0.5, label:'Kum', sub:'ritim · amplitüd', color:'#B9A98E'},
+    {id:'stone',x:W*0.5,  y:H*0.62,label:'Taş', sub:'uzanma · kavrama', color:'#8C9097'},
+    {id:'wind', x:W*0.72, y:H*0.5, label:'Rüzgar', sub:'mimik · simetri', color:'#A8B79A'}
+  ];
+}
+function drawHub(){
+  ctx.clearRect(0,0,W,H);
+  ctx.drawImage(layer,0,0,W,H);
+  /* ortak büyüyen ağaç (tüm modüllerden beslenir) */
+  drawGardenTree(W/2,H*0.5,growth);
+  /* modül taşları */
+  var t=performance.now()/1000;
+  for(var i=0;i<hubNodes.length;i++){var n=hubNodes[i];
+    ctx.save();ctx.translate(n.x,n.y+Math.sin(t*1.2+i)*3);
+    ctx.fillStyle='rgba(90,83,70,.10)';ctx.beginPath();ctx.ellipse(0,26,34,10,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=n.color;ctx.beginPath();ctx.ellipse(0,0,32,26,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.2)';ctx.beginPath();ctx.ellipse(-9,-8,14,9,-.4,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#4a443a';ctx.textAlign='center';ctx.font='500 16px Georgia,serif';
+    ctx.fillText(n.label,0,48);
+    ctx.fillStyle='rgba(74,68,58,.6)';ctx.font='11px -apple-system,sans-serif';
+    ctx.fillText(n.sub,0,64);
+    ctx.restore();
+  }
+  /* başlık ilhamı */
+  ctx.save();ctx.textAlign='center';ctx.fillStyle='rgba(90,83,70,.45)';
+  ctx.font='italic 15px Georgia,serif';
+  ctx.fillText('bir taş seç, bahçeni beslemeye başla',W/2,H*0.86);
+  ctx.restore();
+}
+function drawGardenTree(x,y,g){
+  /* g:0..1 — dallar ve yaprak sayısı ilerlemeyle artar */
+  ctx.save();ctx.translate(x,y);
+  ctx.strokeStyle='rgba(110,95,72,.8)';ctx.lineCap='round';
+  function branch(px,py,ang,len,depth){
+    if(depth<=0||len<6)return;
+    var ex=px+Math.cos(ang)*len,ey=py+Math.sin(ang)*len;
+    ctx.lineWidth=depth*1.4;
+    ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(ex,ey);ctx.stroke();
+    if(depth<=2 && g>0.15){
+      ctx.fillStyle='rgba(147,165,130,'+(0.3+g*0.5)+')';
+      ctx.beginPath();ctx.arc(ex,ey,3+g*3,0,Math.PI*2);ctx.fill();
+    }
+    var spread=0.5+(1-g)*0.2;
+    branch(ex,ey,ang-spread,len*0.72,depth-1);
+    branch(ex,ey,ang+spread,len*0.72,depth-1);
+  }
+  var maxDepth=3+Math.round(g*3);           /* 3..6 */
+  var trunk=Math.min(H,W)*0.10*(0.7+g*0.5);
+  branch(0,40,-Math.PI/2,trunk,maxDepth);
+  /* toprak çizgisi */
+  ctx.strokeStyle='rgba(110,102,86,.25)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(-70,42);ctx.lineTo(70,42);ctx.stroke();
+  ctx.restore();
+  /* ilerleme yüzdesi */
+  ctx.save();ctx.textAlign='center';ctx.fillStyle='rgba(90,83,70,.4)';
+  ctx.font='11px -apple-system,sans-serif';
+  ctx.fillText('bahçe '+Math.round(g*100)+'%',x,y+70);
+  ctx.restore();
+}
+
+/* ============================================================
+   OLAYLAR
+   ============================================================ */
+function pos(e){return {x:e.clientX,y:e.clientY};}
+cv.addEventListener('pointerdown',function(e){
+  ensureAudio();if(audio&&audio.state==='suspended')audio.resume();
+  var p=pos(e);
+  if(screen==='hub'){
+    for(var i=0;i<hubNodes.length;i++){var n=hubNodes[i];
+      if(Math.hypot(p.x-n.x,p.y-n.y)<44){enterModule(n.id);return;}
+    }
+    return;
+  }
+  hideHintSoon();
+  down=true;
+  if(screen==='sand'){begin(p.x,p.y);}
+  else if(screen==='stone'){
+    for(var j=0;j<stones.length;j++){var s=stones[j];
+      if(Math.hypot(p.x-s.x,p.y-s.y)<s.r+16){drag=s;begin(p.x,p.y);dragStart={x:s.x,y:s.y};dragPath=0;break;}
+    }
+  }
+  cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener('pointermove',function(e){
+  if(!down)return;var p=pos(e);raw.x=p.x;raw.y=p.y;
+  if(screen==='sand'&&stroking){var pr={x:sm.x,y:sm.y};smoothStep(filterAlpha());rake(pr,sm);flow();}
+  else if(screen==='stone'&&drag){var pr2={x:sm.x,y:sm.y};smoothStep(.38);dragPath+=Math.hypot(sm.x-pr2.x,sm.y-pr2.y);drag.x=sm.x;drag.y=sm.y;flow();}
+});
+function up(){
+  if(!down)return;down=false;
+  if(screen==='sand'&&stroking)endSand();
+  else if(screen==='stone'&&drag)endStone();
+  updateMetricsUI();
+}
+cv.addEventListener('pointerup',up);
+cv.addEventListener('pointercancel',up);
+
+/* ============================================================
+   UI
+   ============================================================ */
+function $(id){return document.getElementById(id);}
+var hintEl=$('hint'),hintTimer=null;
+function setHint(txt){hintEl.textContent=txt;hintEl.classList.remove('hide');hideHintSoon();}
+function hideHintSoon(){clearTimeout(hintTimer);hintTimer=setTimeout(function(){hintEl.classList.add('hide');},6500);}
+
+var MODCFG={
+  hub:{title:'ZEN BAHÇE'},
+  sand:{title:'KUM',l:['Amplitüd','Düzgünlük','Ritim'],hint:'kumu yavaşça, geniş yaylarla tara — çana uy',
+        scale:function(){return 'UPDRS-III eşlemesi (bradikinezi)';}},
+  stone:{title:'TAŞ',l:['Menzil','Düzgünlük','Verimlilik'],hint:'taşı halkaya taşı — acele etme',
+        scale:function(){return 'Fugl-Meyer ÜE eşlemesi';}},
+  wind:{title:'RÜZGAR',l:['Aktivasyon','Simetri','Kontrol'],hint:'gülümse, kaş kaldır — yumuşak ve simetrik',
+        scale:function(){return 'House-Brackmann / Sunnybrook eşlemesi';}}
+};
+function enterModule(id){
+  screen=id;
+  M={amp:0,smooth:0,rhythm:0,reps:0};revs=[];enso=0;
+  $('back').style.display='flex';
+  $('title').textContent=MODCFG[id].title;
+  var cfg=MODCFG[id];
+  $('l1').textContent=cfg.l[0];$('l2').textContent=cfg.l[1];$('l3').textContent=cfg.l[2];
+  setHint(cfg.hint);
+  updateMetricsUI();
+  if(id==='stone')newTarget();
+  if(id==='wind'){$('camGate').classList.add(neutral?'':'show');if(neutral)setHint(cfg.hint);}
+}
+function goHub(){
+  screen='hub';$('back').style.display='none';$('title').textContent='ZEN BAHÇE';
+  hintEl.classList.add('hide');$('camGate').classList.remove('show');
+}
+$('back').onclick=goHub;
+
+function scaleBand(id){
+  /* metriklerden gösterge bant tahmini — tanısal değil, yönlendirici */
+  var q=(M.amp*.4+M.smooth*.4+M.rhythm*.2)/100; /* 0..1 kaba kalite */
+  if(id==='sand'){var lvl=q>.75?'0-1 (hafif)':q>.5?'1-2':q>.25?'2-3':'3-4 (belirgin)';
+    return 'UPDRS-III bradikinezi tahmini: <b>'+lvl+'</b>';}
+  if(id==='stone'){var s=Math.round(20+q*46);
+    return 'Fugl-Meyer ÜE bandı: <b>~'+s+'/66</b>';}
+  if(id==='wind'){var hb=q>.8?'I-II':q>.6?'II-III':q>.4?'III-IV':'IV-V';
+    return 'House-Brackmann tahmini: <b>'+hb+'</b>';}
+  return '';
+}
+function updateMetricsUI(){
+  $('m1').textContent=M.amp?Math.round(M.amp)+'%':'–';
+  $('m2').textContent=M.smooth?Math.round(M.smooth)+'%':'–';
+  $('m3').textContent=M.rhythm?Math.round(M.rhythm)+'%':'–';
+  $('m4').textContent=M.reps;
+  $('b1').style.width=(M.amp||0)+'%';$('b2').style.width=(M.smooth||0)+'%';$('b3').style.width=(M.rhythm||0)+'%';
+  var tag=$('scaleTag');
+  if(screen==='hub'||M.reps===0){tag.innerHTML='<span class="muted">Bir modülde çalışınca skala tahmini burada görünür.</span>';}
+  else{tag.innerHTML=scaleBand(screen)+'<span class="muted">Yönlendirici tahmin — klinik tanı yerine geçmez.</span>';}
+}
+$('btnSound').onclick=function(){soundOn=!soundOn;this.classList.toggle('on',soundOn);};
+$('btnMetrics').onclick=function(){$('settings').classList.remove('show');$('metrics').classList.toggle('show');this.classList.toggle('on');updateMetricsUI();};
+$('btnSettings').onclick=function(){$('metrics').classList.remove('show');$('settings').classList.toggle('show');this.classList.toggle('on');};
+$('sDiff').oninput=function(){difficulty=+this.value;$('vDiff').textContent=this.value;if(screen==='stone')newTarget();};
+$('sTempo').oninput=function(){beatMs=60000/+this.value;$('vTempo').textContent=this.value;};
+$('sFilter').oninput=function(){filterStrength=+this.value;$('vFilter').textContent=['','Zayıf','Az','Orta','Güçlü','Çok güçlü'][this.value];};
+$('camStart').onclick=startCamera;
+
+/* ============================================================
+   ANA DÖNGÜ
+   ============================================================ */
+function loop(t){
+  if(screen==='hub'){drawHub();requestAnimationFrame(loop);return;}
+  ctx.clearRect(0,0,W,H);
+  if(screen==='wind'){
+    updatePetals();drawWindScene();
+    /* kamera kaybı uyarısı */
+    if(camReady && t-lastFaceT>1500 && !calibrating){
+      ctx.save();ctx.textAlign='center';ctx.fillStyle='rgba(90,83,70,.5)';
+      ctx.font='italic 14px Georgia,serif';ctx.fillText('yüz algılanmıyor — kameraya doğru bak',W/2,H*.5);ctx.restore();
+    }
+  } else {
+    ctx.drawImage(layer,0,0,W,H);
+    if(screen==='sand'){
+      if(soundOn&&audio&&t>nextBeat){nextBeat=t+beatMs;chime(528,.035,1.3);pulse=1;}
+      drawEnso();drawBeat();
+    } else if(screen==='stone'){
+      drawTarget();for(var i=0;i<stones.length;i++)drawStone(ctx,stones[i]);
+    }
+  }
+  requestAnimationFrame(loop);
+}
+window.addEventListener('resize',resize);
+resize();updateMetricsUI();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
